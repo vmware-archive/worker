@@ -134,8 +134,13 @@ func (beacon *Beacon) run(command string, signals <-chan os.Signal, ready chan<-
 		}
 	}
 
-	beacon.Client.Proxy(gardenForwardAddr, gardenForwardAddrRemote)
-	beacon.Client.Proxy(baggageclaimForwardAddr, bcForwardAddrRemote)
+	if gardenForwardAddrRemote != "" {
+		beacon.Client.Proxy(gardenForwardAddr, gardenForwardAddrRemote)
+	}
+
+	if bcForwardAddrRemote != "" {
+		beacon.Client.Proxy(baggageclaimForwardAddr, bcForwardAddrRemote)
+	}
 
 	close(ready)
 

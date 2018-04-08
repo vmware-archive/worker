@@ -20,6 +20,8 @@ type Config struct {
 	Tags     []string `long:"tag"   description:"A tag to set during registration. Can be specified multiple times."`
 	TeamName string   `long:"team"  description:"The name of the team that this worker will be assigned to."`
 
+	Type string `long:"type" default:"garden" choice:"garden" choice:"kubernetes" description:"The type of worker to run"`
+
 	HTTPProxy  string `long:"http-proxy"  env:"http_proxy"                  description:"HTTP proxy endpoint to use for containers."`
 	HTTPSProxy string `long:"https-proxy" env:"https_proxy"                 description:"HTTPS proxy endpoint to use for containers."`
 	NoProxy    string `long:"no-proxy"    env:"no_proxy"    env-delim:","   description:"Blacklist of addresses to skip the proxy when reaching."`
@@ -64,6 +66,7 @@ func (cmd *StartCommand) Execute(args []string) error {
 		GardenAddr:      cmd.GardenAddr,
 		BaggageclaimURL: cmd.BaggageclaimURL,
 		ResourceTypes:   resourceTypes,
+		Type:            cmd.WorkerConfig.Type,
 		Platform:        cmd.Platform,
 		Tags:            cmd.WorkerConfig.Tags,
 		Team:            cmd.WorkerConfig.TeamName,
