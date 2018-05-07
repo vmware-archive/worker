@@ -43,7 +43,7 @@ var _ = Describe("Beacon", func() {
 			Worker: atc.Worker{
 				GardenAddr:      "1.2.3.4:7777",
 				BaggageclaimURL: "wat://5.6.7.8:7788",
-				ReaperAddr:      "wat://5.6.7.8:7799",
+				//	ReaperAddr:      "wat://5.6.7.8:7799",
 			},
 		}
 	})
@@ -496,7 +496,7 @@ var _ = Describe("Beacon", func() {
 
 		BeforeEach(func() {
 			rServer = ghttp.NewServer()
-			beacon.ReaperForwardAddr = rServer.URL()
+			beacon.ReaperAddr = rServer.URL()
 			rServer.Reset()
 		})
 
@@ -559,7 +559,7 @@ var _ = Describe("Beacon", func() {
 			var rServer *ghttp.Server
 			BeforeEach(func() {
 				rServer = ghttp.NewServer()
-				beacon.ReaperForwardAddr = rServer.URL()
+				beacon.ReaperAddr = rServer.URL()
 				rServer.Reset()
 			})
 

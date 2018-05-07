@@ -17,8 +17,8 @@ import (
 
 const gardenForwardAddr = "0.0.0.0:7777"
 const baggageclaimForwardAddr = "0.0.0.0:7788"
-const reaperPort = "7799"
-const reaperForwardAddr = "0.0.0.0:" + reaperPort
+const ReaperPort = "7799"
+const reaperAddr = "0.0.0.0:" + ReaperPort
 
 //go:generate counterfeiter . Closeable
 type Closeable interface {
@@ -59,7 +59,7 @@ type Beacon struct {
 	Client                  Client
 	GardenForwardAddr       string
 	BaggageclaimForwardAddr string
-	ReaperForwardAddr       string
+	ReaperAddr              string
 	RegistrationMode        RegistrationMode
 	KeepAlive               bool
 }
@@ -256,10 +256,10 @@ func (beacon *Beacon) runReport(command string) error {
 	go func() {
 		var err error
 
-		var reaperAddr = beacon.ReaperForwardAddr
+		var reaperAddr = beacon.ReaperAddr
 
 		if reaperAddr == "" {
-			reaperAddr = fmt.Sprintf("http://" + reaperForwardAddr)
+			reaperAddr = fmt.Sprintf("http://" + reaperAddr)
 		}
 
 		rClient := reaper.NewClient(reaperAddr, beacon.Logger.Session("reaper-client"))
@@ -348,10 +348,10 @@ func (beacon *Beacon) runSweep(command string) error {
 
 		beacon.Logger.Debug("received-handles-to-destroy", lager.Data{"num-handles": len(handles)})
 
-		var reaperAddr = beacon.ReaperForwardAddr
+		var reaperAddr = beacon.ReaperAddr
 
 		if reaperAddr == "" {
-			reaperAddr = fmt.Sprintf("http://" + reaperForwardAddr)
+			reaperAddr = fmt.Sprintf("http://" + reaperAddr)
 		}
 
 		rClient := reaper.NewClient(reaperAddr, beacon.Logger.Session("reaper-client"))
