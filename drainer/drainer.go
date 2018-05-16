@@ -60,33 +60,33 @@ func (d *Drainer) Drain(logger lager.Logger) error {
 			return nil
 		}
 
-		if d.IsShutdown {
-			signals := make(chan os.Signal)
-			readyChan := make(chan struct{})
-			err := d.BeaconClient.RetireWorker(signals, readyChan)
-			if err != nil {
-				if err == beacon.ErrFailedToReachAnyTSA {
-					logger.Debug(err.Error())
-					return nil
-				}
-
-				logger.Error("failed-to-retire-worker", err)
-			}
-			logger.Info("finished-retiring-worker")
-		} else {
-			signals := make(chan os.Signal)
-			readyChan := make(chan struct{})
-			err = d.BeaconClient.LandWorker(signals, readyChan)
-			if err != nil {
-				if err == beacon.ErrFailedToReachAnyTSA {
-					logger.Debug(err.Error())
-					return nil
-				}
-				logger.Error("failed-to-land-worker", err)
+		//if d.IsShutdown {
+		signals := make(chan os.Signal)
+		readyChan := make(chan struct{})
+		err = d.BeaconClient.RetireWorker(signals, readyChan)
+		if err != nil {
+			if err == beacon.ErrFailedToReachAnyTSA {
+				logger.Debug(err.Error())
+				return nil
 			}
 
-			logger.Info("finished-landing-worker")
+			logger.Error("failed-to-retire-worker", err)
 		}
+		logger.Info("finished-retiring-worker")
+		// } else {
+		// 	signals := make(chan os.Signal)
+		// 	readyChan := make(chan struct{})
+		// 	err = d.BeaconClient.LandWorker(signals, readyChan)
+		// 	if err != nil {
+		// 		if err == beacon.ErrFailedToReachAnyTSA {
+		// 			logger.Debug(err.Error())
+		// 			return nil
+		// 		}
+		// 		logger.Error("failed-to-land-worker", err)
+		// 	}
+		//
+		// 	logger.Info("finished-landing-worker")
+		// }
 		d.Clock.Sleep(d.WaitInterval)
 	}
 }
