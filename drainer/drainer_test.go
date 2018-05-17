@@ -88,7 +88,6 @@ var _ = Describe("Drainer", func() {
 				Expect(err).NotTo(HaveOccurred())
 
 				Expect(fakeBeaconClient.RetireWorkerCallCount()).To(Equal(5))
-				Expect(fakeBeaconClient.LandWorkerCallCount()).To(Equal(0))
 			})
 
 			Context("when retiring worker fails", func() {
@@ -103,7 +102,6 @@ var _ = Describe("Drainer", func() {
 					Expect(err).NotTo(HaveOccurred())
 
 					Expect(fakeBeaconClient.RetireWorkerCallCount()).To(Equal(5))
-					Expect(fakeBeaconClient.LandWorkerCallCount()).To(Equal(0))
 				})
 			})
 
@@ -117,7 +115,6 @@ var _ = Describe("Drainer", func() {
 					Expect(err).NotTo(HaveOccurred())
 
 					Expect(fakeBeaconClient.RetireWorkerCallCount()).To(Equal(1))
-					Expect(fakeBeaconClient.LandWorkerCallCount()).To(Equal(0))
 				})
 			})
 
@@ -133,7 +130,6 @@ var _ = Describe("Drainer", func() {
 
 					Expect(fakeBeaconClient.RetireWorkerCallCount()).To(Equal(3))
 					Expect(fakeBeaconClient.DeleteWorkerCallCount()).To(Equal(1))
-					Expect(fakeBeaconClient.LandWorkerCallCount()).To(Equal(0))
 				})
 
 				Context("when deleting worker fails", func() {
@@ -183,7 +179,7 @@ var _ = Describe("Drainer", func() {
 				err := drainer.Drain(logger)
 				Expect(err).NotTo(HaveOccurred())
 
-				Expect(fakeBeaconClient.LandWorkerCallCount()).To(Equal(0))
+				Expect(fakeBeaconClient.RetireWorkerCallCount()).To(Equal(0))
 			})
 		})
 
@@ -215,43 +211,12 @@ var _ = Describe("Drainer", func() {
 				}
 			})
 
-			It("runs land-worker until it exits with wait interval", func() {
+			It("runs retire-worker until it exits with wait interval", func() {
 				err := drainer.Drain(logger)
 				Expect(err).NotTo(HaveOccurred())
 
-				//		Expect(fakeBeaconClient.LandWorkerCallCount()).To(Equal(5))
 				Expect(fakeBeaconClient.RetireWorkerCallCount()).To(Equal(5))
 			})
-
-			// Context("when landing worker fails", func() {
-			// 	var disaster = errors.New("disaster")
-			//
-			// 	BeforeEach(func() {
-			// 		fakeBeaconClient.LandWorkerReturns(disaster)
-			// 	})
-			//
-			// 	It("does not return an error and keeps retrying", func() {
-			// 		err := drainer.Drain(logger)
-			// 		Expect(err).NotTo(HaveOccurred())
-			//
-			// 		Expect(fakeBeaconClient.LandWorkerCallCount()).To(Equal(5))
-			// 		Expect(fakeBeaconClient.RetireWorkerCallCount()).To(Equal(0))
-			// 	})
-			// })
-
-			// Context("when landing worker fails to reach any tsa", func() {
-			// 	BeforeEach(func() {
-			// 		fakeBeaconClient.LandWorkerReturns(beacon.ErrFailedToReachAnyTSA)
-			// 	})
-			//
-			// 	It("does not return an error and stops retrying", func() {
-			// 		err := drainer.Drain(logger)
-			// 		Expect(err).NotTo(HaveOccurred())
-			//
-			// 		Expect(fakeBeaconClient.LandWorkerCallCount()).To(Equal(1))
-			// 		Expect(fakeBeaconClient.RetireWorkerCallCount()).To(Equal(0))
-			// 	})
-			// })
 
 			Context("when drain timeout is specified", func() {
 				BeforeEach(func() {
@@ -263,7 +228,6 @@ var _ = Describe("Drainer", func() {
 					err := drainer.Drain(logger)
 					Expect(err).NotTo(HaveOccurred())
 
-					//	Expect(fakeBeaconClient.LandWorkerCallCount()).To(Equal(3))
 					Expect(fakeBeaconClient.DeleteWorkerCallCount()).To(Equal(0))
 					Expect(fakeBeaconClient.RetireWorkerCallCount()).To(Equal(3))
 				})

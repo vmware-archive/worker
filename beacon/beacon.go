@@ -54,7 +54,6 @@ type BeaconClient interface {
 	Register(signals <-chan os.Signal, ready chan<- struct{}) error
 	RetireWorker(signals <-chan os.Signal, ready chan<- struct{}) error
 	MarkandSweepContainersandVolumes() error
-	//LandWorker(signals <-chan os.Signal, ready chan<- struct{}) error
 	DeleteWorker(signals <-chan os.Signal, ready chan<- struct{}) error
 	DisableKeepAlive()
 }
@@ -141,11 +140,6 @@ func (beacon *Beacon) MarkandSweepContainersandVolumes() error {
 	}
 	return errors.New(errString)
 }
-
-// func (beacon *Beacon) LandWorker(signals <-chan os.Signal, ready chan<- struct{}) error {
-// 	beacon.Logger.Debug("land-worker")
-// 	return beacon.run("land-worker", signals, ready)
-// }
 
 func (beacon *Beacon) DeleteWorker(signals <-chan os.Signal, ready chan<- struct{}) error {
 	beacon.Logger.Debug("delete-worker.start")
