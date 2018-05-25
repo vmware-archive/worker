@@ -53,6 +53,7 @@ type Session interface {
 type BeaconClient interface {
 	Register(signals <-chan os.Signal, ready chan<- struct{}) error
 	RetireWorker(signals <-chan os.Signal, ready chan<- struct{}) error
+	CheckWorker(signals <-chan os.Signal, ready chan<- struct{}) error
 	MarkandSweepContainersandVolumes() error
 	DeleteWorker(signals <-chan os.Signal, ready chan<- struct{}) error
 	DisableKeepAlive()
@@ -105,6 +106,12 @@ func (beacon *Beacon) registerDirect(signals <-chan os.Signal, ready chan<- stru
 func (beacon *Beacon) RetireWorker(signals <-chan os.Signal, ready chan<- struct{}) error {
 	beacon.Logger.Debug("retire-worker")
 	return beacon.run("retire-worker", signals, ready)
+}
+
+// CheckWorker implements the retiring of the worker
+func (beacon *Beacon) CheckWorker(signals <-chan os.Signal, ready chan<- struct{}) error {
+	beacon.Logger.Debug("check-worker")
+	return beacon.run("check-worker", signals, ready)
 }
 
 // MarkandSweepContainersandVolumes implements the marking and sweeping of containers and volumes

@@ -60,19 +60,37 @@ func (d *Drainer) Drain(logger lager.Logger) error {
 			return nil
 		}
 
-		signals := make(chan os.Signal)
-		readyChan := make(chan struct{})
-		err = d.BeaconClient.RetireWorker(signals, readyChan)
+		signalsCheck := make(chan os.Signal)
+		readyChanCheck := make(chan struct{})
+
+		err = d.BeaconClient.CheckWorker(signalsCheck, readyChanCheck)
+
+		// check worker if present
 		if err != nil {
 			if err == beacon.ErrFailedToReachAnyTSA {
 				logger.Debug(err.Error())
 				return nil
 			}
+			logger.Error("failed-to-check-worker", err)
 
-			logger.Error("failed-to-retire-worker", err)
+			// if there is an error then worker is present
+			signals := make(chan os.Signal)
+			readyChan := make(chan struct{})
+			err = d.BeaconClient.RetireWorker(signals, readyChan)
+			if err != nil {
+				if err == beacon.ErrFailedToReachAnyTSA {
+					logger.Debug(err.Error())
+					return nil
+				}
+
+				logger.Error("failed-to-retire-worker", err)
+			}
+
+			d.Clock.Sleep(d.WaitInterval)
+
+		} else {
+			// no error so worker is gone
+			return nil
 		}
-		logger.Info("finished-retiring-worker")
-
-		d.Clock.Sleep(d.WaitInterval)
 	}
 }

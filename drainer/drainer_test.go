@@ -83,78 +83,93 @@ var _ = Describe("Drainer", func() {
 				}
 			})
 
-			It("runs retire-worker until it exits with wait interval", func() {
-				err := drainer.Drain(logger)
-				Expect(err).NotTo(HaveOccurred())
-
-				Expect(fakeBeaconClient.RetireWorkerCallCount()).To(Equal(5))
-			})
-
-			Context("when retiring worker fails", func() {
-				var disaster = errors.New("disaster")
-
+			Context("worker is still present", func() {
 				BeforeEach(func() {
-					fakeBeaconClient.RetireWorkerReturns(disaster)
+					fakeBeaconClient.CheckWorkerReturns(errors.New("worker is present"))
 				})
 
-				It("does not return an error and keeps retrying", func() {
+				It("runs retire-worker until it exits with wait interval", func() {
 					err := drainer.Drain(logger)
 					Expect(err).NotTo(HaveOccurred())
 
 					Expect(fakeBeaconClient.RetireWorkerCallCount()).To(Equal(5))
 				})
-			})
 
-			Context("when retiring worker fails to reach any tsa", func() {
-				BeforeEach(func() {
-					fakeBeaconClient.RetireWorkerReturns(beacon.ErrFailedToReachAnyTSA)
-				})
-
-				It("does not return an error and stops retrying", func() {
-					err := drainer.Drain(logger)
-					Expect(err).NotTo(HaveOccurred())
-
-					Expect(fakeBeaconClient.RetireWorkerCallCount()).To(Equal(1))
-				})
-			})
-
-			Context("when drain timeout is specified", func() {
-				BeforeEach(func() {
-					timeoutInterval := 3 * waitInterval
-					drainer.Timeout = &timeoutInterval
-				})
-
-				It("exits after timeout and deletes the worker forcibly", func() {
-					err := drainer.Drain(logger)
-					Expect(err).NotTo(HaveOccurred())
-
-					Expect(fakeBeaconClient.RetireWorkerCallCount()).To(Equal(3))
-					Expect(fakeBeaconClient.DeleteWorkerCallCount()).To(Equal(1))
-				})
-
-				Context("when deleting worker fails", func() {
+				Context("when retiring worker fails", func() {
 					var disaster = errors.New("disaster")
 
 					BeforeEach(func() {
-						fakeBeaconClient.DeleteWorkerReturns(disaster)
+						fakeBeaconClient.RetireWorkerReturns(disaster)
 					})
 
-					It("returns an error", func() {
+					It("does not return an error and keeps retrying", func() {
 						err := drainer.Drain(logger)
-						Expect(err).To(HaveOccurred())
-						Expect(err).To(Equal(disaster))
+						Expect(err).NotTo(HaveOccurred())
+
+						Expect(fakeBeaconClient.RetireWorkerCallCount()).To(Equal(5))
 					})
 				})
 
-				Context("when deleting worker fails to reach any tsa", func() {
+				Context("when retiring worker fails to reach any tsa", func() {
 					BeforeEach(func() {
-						fakeBeaconClient.DeleteWorkerReturns(beacon.ErrFailedToReachAnyTSA)
+						fakeBeaconClient.RetireWorkerReturns(beacon.ErrFailedToReachAnyTSA)
 					})
 
-					It("does not return an error", func() {
+					It("does not return an error and stops retrying", func() {
 						err := drainer.Drain(logger)
 						Expect(err).NotTo(HaveOccurred())
+
+						Expect(fakeBeaconClient.RetireWorkerCallCount()).To(Equal(1))
 					})
+				})
+
+				Context("when drain timeout is specified", func() {
+					BeforeEach(func() {
+						timeoutInterval := 3 * waitInterval
+						drainer.Timeout = &timeoutInterval
+					})
+
+					It("exits after timeout and deletes the worker forcibly", func() {
+						err := drainer.Drain(logger)
+						Expect(err).NotTo(HaveOccurred())
+
+						Expect(fakeBeaconClient.RetireWorkerCallCount()).To(Equal(3))
+						Expect(fakeBeaconClient.DeleteWorkerCallCount()).To(Equal(1))
+					})
+
+					Context("when deleting worker fails", func() {
+						var disaster = errors.New("disaster")
+
+						BeforeEach(func() {
+							fakeBeaconClient.DeleteWorkerReturns(disaster)
+						})
+
+						It("returns an error", func() {
+							err := drainer.Drain(logger)
+							Expect(err).To(HaveOccurred())
+							Expect(err).To(Equal(disaster))
+						})
+					})
+
+					Context("when deleting worker fails to reach any tsa", func() {
+						BeforeEach(func() {
+							fakeBeaconClient.DeleteWorkerReturns(beacon.ErrFailedToReachAnyTSA)
+						})
+
+						It("does not return an error", func() {
+							err := drainer.Drain(logger)
+							Expect(err).NotTo(HaveOccurred())
+						})
+					})
+				})
+			})
+
+			Context("when worker is gone.....", func() {
+				It("does not run retire-worker", func() {
+					err := drainer.Drain(logger)
+					Expect(err).NotTo(HaveOccurred())
+
+					Expect(fakeBeaconClient.RetireWorkerCallCount()).To(Equal(0))
 				})
 			})
 		})
@@ -209,6 +224,7 @@ var _ = Describe("Drainer", func() {
 					fakeClock.Increment(waitInterval)
 					return true, nil
 				}
+				fakeBeaconClient.CheckWorkerReturns(errors.New("bad err"))
 			})
 
 			It("runs retire-worker until it exits with wait interval", func() {
