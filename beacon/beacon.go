@@ -2,6 +2,7 @@ package beacon
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -10,6 +11,8 @@ import (
 	"net/url"
 	"os"
 	"time"
+
+	"sync"
 
 	"code.cloudfoundry.org/garden"
 	"code.cloudfoundry.org/lager"
@@ -84,28 +87,99 @@ const (
 )
 
 func (beacon *Beacon) Register(signals <-chan os.Signal, ready chan<- struct{}) error {
-	beacon.Logger.Debug("registering")
-	if beacon.RegistrationMode == Direct {
-		return beacon.registerDirect(signals, ready)
+	rebalanceDuration := time.Second * 5
+
+	rebalanceTicker := time.NewTicker(rebalanceDuration)
+	defer rebalanceTicker.Stop()
+
+	wg := new(sync.WaitGroup)
+
+	wgMutex := new(sync.Mutex)
+	wgCount := 0
+	ctx := context.Background()
+	cancellableCtx, cancelFunc := context.WithCancel(ctx)
+
+	registerWorker := func(errChan chan error) {
+		defer func() {
+			wg.Done()
+			wgMutex.Lock()
+			wgCount--
+			wgMutex.Unlock()
+		}()
+
+		disableKeepAlive := make(chan struct{})
+		beacon.Logger.Debug("registering")
+
+		//Set time to expire KeepAlive
+		// CC: we can maybe remove this and instead
+		//	   create a timeout'able context.
+		go func() {
+			time.Sleep(rebalanceDuration)
+			close(disableKeepAlive)
+		}()
+
+		if beacon.RegistrationMode == Direct {
+			errChan <- beacon.registerDirect(cancellableCtx, disableKeepAlive)
+		} else {
+			errChan <- beacon.registerForwarded(cancellableCtx, disableKeepAlive)
+		}
+		beacon.Logger.Debug("End of connection func")
 	}
 
-	return beacon.registerForwarded(signals, ready)
+	beacon.Logger.Debug("adding-connection-to-pool")
+
+	latestErrChan := make(chan error, 1)
+
+	wg.Add(1)
+	wgMutex.Lock()
+	wgCount++
+	wgMutex.Unlock()
+	go registerWorker(latestErrChan)
+
+	for {
+		select {
+		case <-rebalanceTicker.C:
+			//if wgCount < 5 {
+				wg.Add(1)
+				wgMutex.Lock()
+				wgCount++
+				wgMutex.Unlock()
+				beacon.Logger.Debug("adding-connection-to-pool")
+				latestErrChan = make(chan error, 1)
+				go registerWorker(latestErrChan)
+			//} else {
+			//	beacon.Logger.Debug("max-connections-in-pool-skipping-add")
+			//}
+		case err := <-latestErrChan:
+			beacon.Logger.Debug("latest-connection-errored")
+			cancelFunc()
+			wg.Wait()
+			return err
+		case <-signals:
+			beacon.Logger.Debug("interrupted")
+			cancelFunc()
+			beacon.Logger.Debug("cancelled")
+			wg.Wait()
+			beacon.Logger.Debug("End of Register Interrupt")
+			return nil
+		}
+	}
 }
 
-func (beacon *Beacon) registerForwarded(signals <-chan os.Signal, ready chan<- struct{}) error {
+func (beacon *Beacon) registerForwarded(ctx context.Context, disableKeepAlive <-chan struct{}) error {
 	beacon.Logger.Debug("forward-worker")
-	return beacon.run(
+	return beacon.registerRun(
 		"forward-worker "+
 			"--garden "+gardenForwardAddr+" "+
 			"--baggageclaim "+baggageclaimForwardAddr+" ",
-		signals,
-		ready,
+		ctx,
+		disableKeepAlive,
 	)
 }
 
-func (beacon *Beacon) registerDirect(signals <-chan os.Signal, ready chan<- struct{}) error {
+func (beacon *Beacon) registerDirect(ctx context.Context, disableKeepAlive <-chan struct{}) error {
 	beacon.Logger.Debug("register-worker")
-	return beacon.run("register-worker", signals, ready)
+	return beacon.registerRun("register-worker", ctx, disableKeepAlive)
 }
 
 // RetireWorker sends a message via the TSA to retire the worker
@@ -372,6 +446,108 @@ func (beacon *Beacon) run(command string, signals <-chan os.Signal, ready chan<-
 
 		return nil
 	case err := <-exited:
+		if err != nil {
+			beacon.Logger.Error("failed-waiting-on-remote-command", err)
+		}
+		return err
+	case err := <-keepaliveFailed:
+		beacon.Logger.Error("failed-to-keep-alive", err)
+		return err
+	}
+}
+
+// CC: maybe we should pass `ctx` as the first argument (instead of
+// `command` to adhere to go patterns?
+func (beacon *Beacon) registerRun(command string, ctx context.Context, disableKeepAlive <-chan struct{}) error {
+	beacon.Logger.Debug("command-to-run", lager.Data{"cmd": command})
+
+	conn, err := beacon.Client.Dial()
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	var cancelKeepalive chan<- struct{}
+	var keepaliveFailed <-chan error
+
+	if beacon.KeepAlive {
+		keepaliveFailed, cancelKeepalive = beacon.Client.KeepAlive()
+	}
+
+	workerPayload, err := json.Marshal(beacon.Worker)
+	if err != nil {
+		return err
+	}
+
+	sess, err := beacon.Client.NewSession(
+		bytes.NewBuffer(workerPayload),
+		os.Stdout,
+		os.Stderr,
+	)
+
+	if err != nil {
+		return fmt.Errorf("failed to create session: %s", err)
+	}
+
+	defer sess.Close()
+	err = sess.Start(command)
+	if err != nil {
+		return err
+	}
+
+	bcURL, err := url.Parse(beacon.Worker.BaggageclaimURL)
+	if err != nil {
+		return fmt.Errorf("failed to parse baggageclaim url: %s", err)
+	}
+
+	var gardenForwardAddrRemote = beacon.Worker.GardenAddr
+	var bcForwardAddrRemote = bcURL.Host
+
+	if beacon.GardenAddr != "" {
+		gardenForwardAddrRemote = beacon.GardenAddr
+
+		if beacon.BaggageclaimAddr != "" {
+			bcForwardAddrRemote = beacon.BaggageclaimAddr
+		}
+	}
+
+	beacon.Logger.Debug("ssh-forward-config", lager.Data{
+		"gardenForwardAddrRemote": gardenForwardAddrRemote,
+		"bcForwardAddrRemote":     bcForwardAddrRemote,
+	})
+	beacon.Client.Proxy(gardenForwardAddr, gardenForwardAddrRemote)
+	beacon.Client.Proxy(baggageclaimForwardAddr, bcForwardAddrRemote)
+
+	exited := make(chan error, 1)
+
+	go func() {
+		exited <- sess.Wait()
+	}()
+
+	if beacon.KeepAlive {
+		go func() {
+			select {
+			case <-ctx.Done():
+				fmt.Printf("closing channel %p from ctx.done\n", cancelKeepalive)
+				close(cancelKeepalive)
+			case <-disableKeepAlive:
+				fmt.Printf("closing channel %p from disableKeepAlive\n", cancelKeepalive)
+				close(cancelKeepalive)
+			}
+		}()
+	}
+
+	select {
+	case <-ctx.Done():
+		beacon.Logger.Debug("RegisterRun interrupt")
+		sess.Close()
+		// TODO Is the blocking line below something than can be removed ? CC & SV
+		<-exited
+		// don't bother waiting for keepalive
+		beacon.Logger.Debug("RegisterRun end of interrupt")
+		return nil
+	case err := <-exited:
+		beacon.Logger.Debug("RegisterRun exited")
 		if err != nil {
 			beacon.Logger.Error("failed-waiting-on-remote-command", err)
 		}
