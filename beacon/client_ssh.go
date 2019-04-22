@@ -51,6 +51,13 @@ func (c *sshClient) Dial() (Closeable, error) {
 	}
 
 	clientConfig := &ssh.ClientConfig{
+		Config: ssh.Config{
+			MACs: []string{
+				"hmac-sha2-256-etm@openssh.com",
+				"hmac-sha2-256",
+			},
+		},
+
 		User: "beacon", // doesn't matter
 
 		HostKeyCallback: c.config.checkHostKey,
